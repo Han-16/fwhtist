@@ -11,7 +11,7 @@ for mode in "${MODES[@]}"; do
   for exp in $EXPS; do
     for procs in "${PROCS[@]}"; do
       echo "Running MSM: mode=$mode, procs=$procs, exp=$exp"
-      go run ../../msmtest $exp $ITERS $procs $mode
+      go run main.go $exp $ITERS $procs $mode
     done
   done
 done

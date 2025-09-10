@@ -150,3 +150,17 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 
 	return out
 }
+
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

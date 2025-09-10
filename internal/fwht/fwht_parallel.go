@@ -36,58 +36,56 @@ func MatVecHadamardPar(in []bn254.G1Affine, workers int) ([]bn254.G1Affine, erro
 		}
 	})
 
-	// Stages
+	// Stages (2D 타일링: 블록×j)
 	for step := 1; step < n; step <<= 1 {
-		block := step << 1 // elems per block
-		nb := n / block    // number of blocks at this stage
-		eff := workers
-		if eff > nb {
-			eff = nb
+		block := step << 1
+		nb := n / block
+
+		// 목표 태스크 수: 코어 여유 있게 3배
+		targetTasks := workers * 3
+		if targetTasks < workers {
+			targetTasks = workers
 		}
 
-		if eff <= 1 || nb <= 1 {
-			// serial
-			for b := 0; b < nb; b++ {
-				base := b * block
-				for j := 0; j < step; j++ {
-					a := &outJac[base+j]
-					c := &outJac[base+j+step]
+		type taskT struct{ b0, b1, j0, j1 int }
+		tasks := make([]taskT, 0, targetTasks)
 
-					ta := *a
-					tc := *c
-
-					sum := ta
-					sum.AddAssign(&tc)
-
-					tc.Neg(&tc)
-					diff := ta
-					diff.AddAssign(&tc)
-
-					*a = sum
-					*c = diff
+		if nb >= targetTasks {
+			// 블록만 잘게 분할
+			chunkB := (nb + targetTasks - 1) / targetTasks
+			for b0 := 0; b0 < nb; b0 += chunkB {
+				b1 := b0 + chunkB
+				if b1 > nb {
+					b1 = nb
 				}
+				tasks = append(tasks, taskT{b0: b0, b1: b1, j0: 0, j1: step})
 			}
-			continue
+		} else {
+			// nb가 작으면 j축까지 타일링
+			jTiles := targetTasks / max(1, nb)
+			if jTiles < 1 {
+				jTiles = 1
+			}
+			if jTiles > step {
+				jTiles = step
+			}
+			tile := (step + jTiles - 1) / jTiles
+			for j0 := 0; j0 < step; j0 += tile {
+				j1 := j0 + tile
+				if j1 > step {
+					j1 = step
+				}
+				tasks = append(tasks, taskT{b0: 0, b1: nb, j0: j0, j1: j1})
+			}
 		}
 
-		// parallel by blocks
-		var wg sync.WaitGroup
-		chunk := (nb + eff - 1) / eff
-		for w := 0; w < eff; w++ {
-			b0 := w * chunk
-			if b0 >= nb {
-				break
-			}
-			b1 := b0 + chunk
-			if b1 > nb {
-				b1 = nb
-			}
-			wg.Add(1)
-			go func(b0, b1 int) {
-				defer wg.Done()
-				for b := b0; b < b1; b++ {
+		// 태스크 실행
+		if len(tasks) <= 1 {
+			// 아주 작은 경우 직렬 처리
+			for _, t := range tasks {
+				for b := t.b0; b < t.b1; b++ {
 					base := b * block
-					for j := 0; j < step; j++ {
+					for j := t.j0; j < t.j1; j++ {
 						a := &outJac[base+j]
 						c := &outJac[base+j+step]
 
@@ -105,9 +103,46 @@ func MatVecHadamardPar(in []bn254.G1Affine, workers int) ([]bn254.G1Affine, erro
 						*c = diff
 					}
 				}
-			}(b0, b1)
+			}
+		} else {
+			var wg sync.WaitGroup
+			workCh := make(chan taskT, len(tasks))
+			for _, t := range tasks {
+				workCh <- t
+			}
+			close(workCh)
+
+			W := min(workers, len(tasks))
+			wg.Add(W)
+			for w := 0; w < W; w++ {
+				go func() {
+					defer wg.Done()
+					for t := range workCh {
+						for b := t.b0; b < t.b1; b++ {
+							base := b * block
+							for j := t.j0; j < t.j1; j++ {
+								a := &outJac[base+j]
+								c := &outJac[base+j+step]
+
+								ta := *a
+								tc := *c
+
+								sum := ta
+								sum.AddAssign(&tc)
+
+								tc.Neg(&tc)
+								diff := ta
+								diff.AddAssign(&tc)
+
+								*a = sum
+								*c = diff
+							}
+						}
+					}
+				}()
+			}
+			wg.Wait()
 		}
-		wg.Wait()
 	}
 
 	// Jacobian -> Affine (parallelized per-point)
@@ -148,56 +183,51 @@ func MatVecHadamardParBatch(in []bn254.G1Affine, workers int) ([]bn254.G1Affine,
 		}
 	})
 
-	// Stages (동일)
+	// Stages (2D 타일링: 블록×j)
 	for step := 1; step < n; step <<= 1 {
 		block := step << 1
 		nb := n / block
-		eff := workers
-		if eff > nb {
-			eff = nb
+
+		targetTasks := workers * 3
+		if targetTasks < workers {
+			targetTasks = workers
 		}
 
-		if eff <= 1 || nb <= 1 {
-			for b := 0; b < nb; b++ {
-				base := b * block
-				for j := 0; j < step; j++ {
-					a := &outJac[base+j]
-					c := &outJac[base+j+step]
+		type taskT struct{ b0, b1, j0, j1 int }
+		tasks := make([]taskT, 0, targetTasks)
 
-					ta := *a
-					tc := *c
-
-					sum := ta
-					sum.AddAssign(&tc)
-
-					tc.Neg(&tc)
-					diff := ta
-					diff.AddAssign(&tc)
-
-					*a = sum
-					*c = diff
+		if nb >= targetTasks {
+			chunkB := (nb + targetTasks - 1) / targetTasks
+			for b0 := 0; b0 < nb; b0 += chunkB {
+				b1 := b0 + chunkB
+				if b1 > nb {
+					b1 = nb
 				}
+				tasks = append(tasks, taskT{b0: b0, b1: b1, j0: 0, j1: step})
 			}
-			continue
+		} else {
+			jTiles := targetTasks / max(1, nb)
+			if jTiles < 1 {
+				jTiles = 1
+			}
+			if jTiles > step {
+				jTiles = step
+			}
+			tile := (step + jTiles - 1) / jTiles
+			for j0 := 0; j0 < step; j0 += tile {
+				j1 := j0 + tile
+				if j1 > step {
+					j1 = step
+				}
+				tasks = append(tasks, taskT{b0: 0, b1: nb, j0: j0, j1: j1})
+			}
 		}
 
-		var wg sync.WaitGroup
-		chunk := (nb + eff - 1) / eff
-		for w := 0; w < eff; w++ {
-			b0 := w * chunk
-			if b0 >= nb {
-				break
-			}
-			b1 := b0 + chunk
-			if b1 > nb {
-				b1 = nb
-			}
-			wg.Add(1)
-			go func(b0, b1 int) {
-				defer wg.Done()
-				for b := b0; b < b1; b++ {
+		if len(tasks) <= 1 {
+			for _, t := range tasks {
+				for b := t.b0; b < t.b1; b++ {
 					base := b * block
-					for j := 0; j < step; j++ {
+					for j := t.j0; j < t.j1; j++ {
 						a := &outJac[base+j]
 						c := &outJac[base+j+step]
 
@@ -215,9 +245,46 @@ func MatVecHadamardParBatch(in []bn254.G1Affine, workers int) ([]bn254.G1Affine,
 						*c = diff
 					}
 				}
-			}(b0, b1)
+			}
+		} else {
+			var wg sync.WaitGroup
+			workCh := make(chan taskT, len(tasks))
+			for _, t := range tasks {
+				workCh <- t
+			}
+			close(workCh)
+
+			W := min(workers, len(tasks))
+			wg.Add(W)
+			for w := 0; w < W; w++ {
+				go func() {
+					defer wg.Done()
+					for t := range workCh {
+						for b := t.b0; b < t.b1; b++ {
+							base := b * block
+							for j := t.j0; j < t.j1; j++ {
+								a := &outJac[base+j]
+								c := &outJac[base+j+step]
+
+								ta := *a
+								tc := *c
+
+								sum := ta
+								sum.AddAssign(&tc)
+
+								tc.Neg(&tc)
+								diff := ta
+								diff.AddAssign(&tc)
+
+								*a = sum
+								*c = diff
+							}
+						}
+					}
+				}()
+			}
+			wg.Wait()
 		}
-		wg.Wait()
 	}
 
 	// Jacobian -> Affine (batch inversion + parallel multiplies)
