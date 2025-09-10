@@ -120,17 +120,6 @@ func main() {
 		expected = bn254.G1Jac{}
 	}
 
-	// ---- warmup ----
-	{
-		resAff, err := msm.MultiExpMSM(points, scalars)
-		must(err)
-
-		if mode == "const" && !equalAffineJac(resAff, expected) {
-			panic("warmup: MSM result mismatch with (n*s)*g")
-		}
-		runtime.KeepAlive(resAff)
-	}
-
 	// ---- benchmark ----
 	var best, total time.Duration
 	for it := 0; it < iters; it++ {

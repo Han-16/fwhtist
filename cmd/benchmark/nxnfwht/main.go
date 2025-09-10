@@ -84,12 +84,6 @@ func main() {
 		fmt.Fprintln(out, "# exp | n | iters | Best | Avg")
 	}
 
-	// warmup (병렬 버전 호출)
-	{
-		_, err := fwht.MatVecHadamardParBatch(points, maxProcs)
-		must(err)
-	}
-
 	// benchmark (병렬 버전 호출)
 	var best, total time.Duration
 	for it := 0; it < iters; it++ {
