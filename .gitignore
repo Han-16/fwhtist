@@ -1,2 +1,4 @@
 .DS_Store
 data/.DS_Store
+cmd/benchmark/msm/*.txt
+cmd/benchmark/nxnfwht/*.txt

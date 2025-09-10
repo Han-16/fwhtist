@@ -1,8 +1,19 @@
 #!/bin/bash
+set -e
 
-for exp in $(seq 10 30); do
-  for procs in $(seq 1 10); do
-    echo "Running exp=$exp, iters=1, procs=$procs"
-    go run ../../msmtest $exp 1 $procs
+EXPS=$(seq 10 30)           # exp range (10 ~ 30)
+PROCS=(10)          # number of processes
+ITERS=1                     # number of iterations
+MODES=("const")      # benchmark modes: "const", "rand"
+
+# Run benchmarks
+for mode in "${MODES[@]}"; do
+  for exp in $EXPS; do
+    for procs in "${PROCS[@]}"; do
+      echo "Running MSM: mode=$mode, procs=$procs, exp=$exp"
+      go run ../../msmtest $exp $ITERS $procs $mode
+    done
   done
 done
+
+echo "MSM benchmark completed!"

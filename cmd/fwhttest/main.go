@@ -48,6 +48,7 @@ func main() {
 	}
 
 	// ---- correctness check (parallel version) ----
+	fmt.Println("Verifying FWHT^2 == n * I ...")
 	ok, err := verifyDoubleFWHT(points, procs)
 	must(err)
 	fmt.Printf("Check H(H(p)) == n * p : %v\n", ok)

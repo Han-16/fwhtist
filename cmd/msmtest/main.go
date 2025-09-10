@@ -1,7 +1,8 @@
-// go run ./cmd/msmtest <exp> [iters] [maxProcs]
+// go run ./cmd/msmtest <exp> [iters] [maxProcs] [mode]
 //   exp      : n = 2^exp
 //   iters    : number of iterations (default 5)
 //   maxProcs : GOMAXPROCS setting (default -1: number of CPU cores)
+//   mode     : "const" (default) or "rand"
 
 package main
 
@@ -11,9 +12,11 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Han-16/fwhtist/internal/msm"
+	"github.com/Han-16/fwhtist/internal/randutil"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
@@ -21,7 +24,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run ./cmd/msmtest <exp> [iters] [maxProcs]")
+		fmt.Println("Usage: go run ./cmd/msmtest <exp> [iters] [maxProcs] [mode]")
 		return
 	}
 	exp, err := strconv.Atoi(os.Args[1])
@@ -50,55 +53,85 @@ func main() {
 	}
 	runtime.GOMAXPROCS(maxProcs)
 
-	filename := fmt.Sprintf("procs%d.txt", maxProcs)
+	mode := "const"
+	if len(os.Args) >= 5 {
+		mode = strings.ToLower(os.Args[4])
+	}
+	if mode != "const" && mode != "rand" {
+		panic(`mode must be "const" or "rand"`)
+	}
+
+	filename := fmt.Sprintf("%s_procs%d.txt", mode, maxProcs)
 	out, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	must(err)
 	defer out.Close()
 
 	if fi, err := out.Stat(); err == nil && fi.Size() == 0 {
-		fmt.Fprintf(out, "# MSM Benchmark Results (procs=%d)\n", maxProcs)
+		fmt.Fprintf(out, "# MSM Benchmark Results (mode=%s, procs=%d)\n", mode, maxProcs)
 		fmt.Fprintln(out, "# exp | n | iters | Best | Avg")
 	}
 
-	// ---- 1) s: random scalar ----
-	var s fr.Element
-	s.SetRandom()
-
-	// ---- 2) scalars = [s, ..., s] ----
-	scalars := make([]fr.Element, n)
-	for i := 0; i < n; i++ {
-		scalars[i] = s
-	}
-
-	// ---- 3) points = [g, ..., g] ----
-	_, _, g, _ := bn254.Generators() // g: G1Affine
-	points := make([]bn254.G1Affine, n)
-	for i := 0; i < n; i++ {
-		points[i] = g
-	}
-
-	// ---- 4) expected = (n*s) * g ----
-	var ns fr.Element
-	ns.SetUint64(uint64(n))
-	ns.Mul(&ns, &s)
-	nsBytes := ns.Bytes()
-	nsBig := new(big.Int).SetBytes(nsBytes[:])
-
+	// ---- prepare scalars & points ----
+	var scalars []fr.Element
+	var points []bn254.G1Affine
 	var expected bn254.G1Jac
-	expected.FromAffine(&g)
-	expected.ScalarMultiplication(&expected, nsBig)
 
-	// ---- 5) warmup ----
+	switch mode {
+	case "const":
+		// scalars = [s, ..., s]
+		var s fr.Element
+		s.SetRandom()
+		scalars = make([]fr.Element, n)
+		for i := 0; i < n; i++ {
+			scalars[i] = s
+		}
+
+		// points = [g, ..., g]
+		_, _, g, _ := bn254.Generators()
+		points = make([]bn254.G1Affine, n)
+		for i := 0; i < n; i++ {
+			points[i] = g
+		}
+
+		// expected = (n*s) * g
+		var ns fr.Element
+		ns.SetUint64(uint64(n))
+		ns.Mul(&ns, &s)
+		nsBytes := ns.Bytes()
+		nsBig := new(big.Int).SetBytes(nsBytes[:])
+
+		expected.FromAffine(&g)
+		expected.ScalarMultiplication(&expected, nsBig)
+
+	case "rand":
+		// random scalars
+		scalars = make([]fr.Element, n)
+		for i := 0; i < n; i++ {
+			var s fr.Element
+			s.SetRandom()
+			scalars[i] = s
+		}
+
+		// random points
+		var err error
+		points, err = randutil.RandomPointsG1Par(n, maxProcs)
+		must(err)
+
+		expected = bn254.G1Jac{}
+	}
+
+	// ---- warmup ----
 	{
 		resAff, err := msm.MultiExpMSM(points, scalars)
 		must(err)
-		if !equalAffineJac(resAff, expected) {
+
+		if mode == "const" && !equalAffineJac(resAff, expected) {
 			panic("warmup: MSM result mismatch with (n*s)*g")
 		}
 		runtime.KeepAlive(resAff)
 	}
 
-	// ---- 6) benchmark ----
+	// ---- benchmark ----
 	var best, total time.Duration
 	for it := 0; it < iters; it++ {
 		start := time.Now()
@@ -106,7 +139,7 @@ func main() {
 		must(err)
 		elapsed := time.Since(start)
 
-		if !equalAffineJac(resAff, expected) {
+		if mode == "const" && !equalAffineJac(resAff, expected) {
 			panic(fmt.Sprintf("iter %d: MSM result mismatch with (n*s)*g", it))
 		}
 		runtime.KeepAlive(resAff)
@@ -118,10 +151,9 @@ func main() {
 	}
 	avg := time.Duration(int64(total) / int64(iters))
 
-	// ---- 7) summary ----
+	// ---- summary ----
 	fmt.Fprintf(out, "%d | %d | %d | %s | %s\n", exp, n, iters, best, avg)
-
-	fmt.Printf("Appended: procs=%d, exp=%d, iters=%d\n", maxProcs, exp, iters)
+	fmt.Printf("Appended: mode=%s, procs=%d, exp=%d, iters=%d\n", mode, maxProcs, exp, iters)
 }
 
 func equalAffineJac(a bn254.G1Affine, b bn254.G1Jac) bool {

@@ -86,7 +86,7 @@ func main() {
 
 	// warmup (병렬 버전 호출)
 	{
-		_, err := fwht.MatVecHadamardPar(points, maxProcs)
+		_, err := fwht.MatVecHadamardParBatch(points, maxProcs)
 		must(err)
 	}
 
@@ -94,7 +94,7 @@ func main() {
 	var best, total time.Duration
 	for it := 0; it < iters; it++ {
 		start := time.Now()
-		_, err := fwht.MatVecHadamardPar(points, maxProcs)
+		_, err := fwht.MatVecHadamardParBatch(points, maxProcs)
 		must(err)
 		elapsed := time.Since(start)
 
