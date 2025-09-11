@@ -1,8 +1,8 @@
 package fwht
 
 import (
-	"runtime"
 	"sync"
+	"runtime"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -72,9 +72,21 @@ func setInfinity(a *bn254.G1Affine) {
 	a.Y.SetOne()
 }
 
-// BatchJacToAffG1Par converts []G1Jac -> []G1Affine using a single field inversion
-// (batch inversion) + parallelized multiplies. Points with Z=0 (infinity) remain infinity.
-// workers <= 0 => GOMAXPROCS(0).
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+
 func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 	n := len(in)
 	out := make([]bn254.G1Affine, n)
@@ -88,7 +100,7 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 		workers = 1
 	}
 
-	// collect non-zero Z entries
+	// 1) 수집: Z != 0 인덱스만 모은다 (Z=0 → ∞)
 	type idxZ struct {
 		idx int
 		z   fp.Element
@@ -96,7 +108,9 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 	nonZero := make([]idxZ, 0, n)
 	for i := 0; i < n; i++ {
 		if in[i].Z.IsZero() {
-			setInfinity(&out[i])
+			// ∞: gnark-crypto convention (0,1)
+			out[i].X.SetZero()
+			out[i].Y.SetOne()
 		} else {
 			nonZero = append(nonZero, idxZ{idx: i, z: in[i].Z})
 		}
@@ -106,18 +120,18 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 		return out
 	}
 
-	// prefix products of Z
+	// 2) 누적 곱(prefix products) P[j] = ∏_{t=0..j} Z_t
 	acc := make([]fp.Element, k)
 	acc[0] = nonZero[0].z
 	for j := 1; j < k; j++ {
 		acc[j].Mul(&acc[j-1], &nonZero[j].z)
 	}
 
-	// single inversion of total product
+	// 3) 전체 곱의 역원 1/∏Z를 한 번만 계산
 	var invAll fp.Element
 	invAll.Inverse(&acc[k-1])
 
-	// compute each 1/Z_j by backward pass
+	// 4) 역전파로 모든 1/Z_j 산출
 	invZ := make([]fp.Element, k)
 	for j := k - 1; j >= 0; j-- {
 		if j == 0 {
@@ -125,14 +139,13 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 		} else {
 			invZ[j].Mul(&invAll, &acc[j-1])
 		}
-		// propagate: invAll *= Z_j
+		// invAll *= Z_j  (다음 역전파용)
 		invAll.Mul(&invAll, &nonZero[j].z)
 	}
 
-	// finalize affine coordinates in parallel
+	// 5) Affine 좌표 계산을 병렬화
 	parallelRange(k, workers, func(i0, i1 int) {
-		var inv2, inv3 fp.Element
-		var x, y fp.Element
+		var inv2, inv3, x, y fp.Element
 		for j := i0; j < i1; j++ {
 			i := nonZero[j].idx
 
@@ -140,6 +153,7 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 			inv2.Square(&invZ[j])
 			inv3.Mul(&inv2, &invZ[j])
 
+			// X = X / Z^2, Y = Y / Z^3
 			x.Mul(&in[i].X, &inv2)
 			y.Mul(&in[i].Y, &inv3)
 
@@ -149,18 +163,4 @@ func BatchJacToAffG1Par(in []bn254.G1Jac, workers int) []bn254.G1Affine {
 	})
 
 	return out
-}
-
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
