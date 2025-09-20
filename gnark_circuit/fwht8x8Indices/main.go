@@ -61,14 +61,14 @@ func (c *FWHTIndicesCircuit) Define(api frontend.API) error {
 	// Hadamard matrix is H_8
 	// We select a row based on the public `Index`.
 	// The dot product is:
-	// H_8[0] · X = X[0] + X[1] + X[2] + X[3] + X[4] + X[5] + X[6] + X[7]
-	// H_8[1] · X = X[0] - X[1] + X[2] - X[3] + X[4] - X[5] + X[6] - X[7]
-	// H_8[2] · X = X[0] + X[1] - X[2] - X[3] + X[4] + X[5] - X[6] - X[7]
-	// H_8[3] · X = X[0] - X[1] - X[2] + X[3] + X[4] - X[5] - X[6] + X[7]
-	// H_8[4] · X = X[0] + X[1] + X[2] + X[3] - X[4] - X[5] - X[6] - X[7]
-	// H_8[5] · X = X[0] - X[1] + X[2] - X[3] - X[4] + X[5] - X[6] + X[7]
-	// H_8[6] · X = X[0] + X[1] - X[2] - X[3] - X[4] - X[5] + X[6] + X[7]
-	// H_8[7] · X = X[0] - X[1] - X[2] + X[3] - X[4] + X[5] + X[6] - X[7]
+	// H_8[0] · G = G[0] + G[1] + G[2] + G[3] + G[4] + G[5] + G[6] + G[7]
+	// H_8[1] · G = G[0] - G[1] + G[2] - G[3] + G[4] - G[5] + G[6] - G[7]
+	// H_8[2] · G = G[0] + G[1] - G[2] - G[3] + G[4] + G[5] - G[6] - G[7]
+	// H_8[3] · G = G[0] - G[1] - G[2] + G[3] + G[4] - G[5] - G[6] + G[7]
+	// H_8[4] · G = G[0] + G[1] + G[2] + G[3] - G[4] - G[5] - G[6] - G[7]
+	// H_8[5] · G = G[0] - G[1] + G[2] - G[3] - G[4] + G[5] - G[6] + G[7]
+	// H_8[6] · G = G[0] + G[1] - G[2] - G[3] - G[4] - G[5] + G[6] + G[7]
+	// H_8[7] · G = G[0] - G[1] - G[2] + G[3] - G[4] + G[5] + G[6] - G[7]
 
 	// First, compute the sums based on the first bit `idxBits[0]`
 	term01 := curve.AddUnified(&c.G[0], &c.G[1])
