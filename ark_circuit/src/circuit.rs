@@ -12,7 +12,7 @@ pub struct AggKZGInstances<C: CurveGroup> {
     pub random_scalars: Vec<C::BaseField>,
     // pub indices: Vec<usize>,
     pub y: C::Affine,
-    pub commitments: C::BaseField,
+    // pub commitments: C::BaseField,
 }
 
 
@@ -48,9 +48,6 @@ where
         })?;
         let y_var = GG::new_input(cs.clone(), || {
             Ok(self.instance.y)
-        })?;
-        let commitments_var = FpVar::<C::BaseField>::new_input(cs.clone(), || {
-            Ok(self.instance.commitments)
         })?;
 
         // witness

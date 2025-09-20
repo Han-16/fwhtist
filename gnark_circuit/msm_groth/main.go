@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -98,9 +99,12 @@ func main() {
 
 	// 2) big.Int로 좌표/스칼라 추출
 	var g1x, g1y, g2x, g2y, g3x, g3y big.Int
-	G1.X.BigInt(&g1x); G1.Y.BigInt(&g1y)
-	G2.X.BigInt(&g2x); G2.Y.BigInt(&g2y)
-	G3.X.BigInt(&g3x); G3.Y.BigInt(&g3y)
+	G1.X.BigInt(&g1x)
+	G1.Y.BigInt(&g1y)
+	G2.X.BigInt(&g2x)
+	G2.Y.BigInt(&g2y)
+	G3.X.BigInt(&g3x)
+	G3.Y.BigInt(&g3y)
 
 	// 3) Witness/Public 입력 구성
 	assignment := &Circuit{
@@ -162,5 +166,18 @@ func main() {
 	}
 	fmt.Println("verify:", time.Since(t4))
 
+	file, err := os.Create("verifier.sol")
+	must(err)
+	defer file.Close()
+
+	err = vk.ExportSolidity(file)
+	must(err)
+
 	fmt.Println("OK ✅  r1*G1 + r2*G2 == G3 (gadget)")
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

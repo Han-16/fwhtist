@@ -2,8 +2,8 @@
 # FWHT benchmark runner
 set -e
 
-EXPS=$(seq 10 29)           # exp range (10 ~ 30)
-PROCS=(10 7 5)          # number of processes
+EXPS=$(seq 10 18)           # exp range (10 ~ 30)
+PROCS=(1)          # number of processes
 ITERS=1                     # number of iterations
 MODES=("rand")      # benchmark modes
 

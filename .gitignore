@@ -2,3 +2,4 @@
 data/.DS_Store
 cmd/benchmark/msm/*.txt
 cmd/benchmark/nxnfwht/*.txt
+ark_circuit/target/

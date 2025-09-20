@@ -10,15 +10,12 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 
-	// ✅ PLONK 백엔드
 	"github.com/consensys/gnark/backend/plonk"
 
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
-	// ✅ SCS(PLONK용) 빌더
 	"github.com/consensys/gnark/frontend/cs/scs"
 
-	// ✅ KZG SRS를 위한 패키지
 	"github.com/consensys/gnark-crypto/kzg"
 
 	swemu "github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
@@ -101,9 +98,12 @@ func main() {
 
 	// 2) big.Int로 좌표/스칼라 추출
 	var g1x, g1y, g2x, g2y, g3x, g3y big.Int
-	G1.X.BigInt(&g1x); G1.Y.BigInt(&g1y)
-	G2.X.BigInt(&g2x); G2.Y.BigInt(&g2y)
-	G3.X.BigInt(&g3x); G3.Y.BigInt(&g3y)
+	G1.X.BigInt(&g1x)
+	G1.Y.BigInt(&g1y)
+	G2.X.BigInt(&g2x)
+	G2.Y.BigInt(&g2y)
+	G3.X.BigInt(&g3x)
+	G3.Y.BigInt(&g3y)
 
 	// 3) Witness/Public 입력 구성
 	assignment := &Circuit{
