@@ -44,10 +44,10 @@ func (c *FWHTCircuit) Define(api frontend.API) error {
 	// Hadamard matrix is H_4
 	// We select a row based on the public `Index`.
 	// The dot product is:
-	// H_4[0] · X = X[0] + X[1] + X[2] + X[3]
-	// H_4[1] · X = X[0] - X[1] + X[2] - X[3]
-	// H_4[2] · X = X[0] + X[1] - X[2] - X[3]
-	// H_4[3] · X = X[0] - X[1] - X[2] + X[3]
+	// H_4[0] · G = G[0] + G[1] + G[2] + G[3]
+	// H_4[1] · G = G[0] - G[1] + G[2] - G[3]
+	// H_4[2] · G = G[0] + G[1] - G[2] - G[3]
+	// H_4[3] · G = G[0] - G[1] - G[2] + G[3]
 
 	// First, compute the sums based on the first bit `idxBits[0]`
 	term01 := curve.AddUnified(&c.G[0], &c.G[1])
